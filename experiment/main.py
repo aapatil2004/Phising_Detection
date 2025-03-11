@@ -1,30 +1,33 @@
+from urllib.parse import urlparse
+import requests
 from fastapi import FastAPI
-import pandas as pd 
+from pydantic import BaseModel
+import pandas as pd
 import numpy as np
-from thefuzz import fuzz,process
-from fastapi import FastAPI
+import pickle
+from thefuzz import fuzz, process
+import whois
+import xgboost as xgb
 from fastapi.middleware.cors import CORSMiddleware
 
-df = pd.read_csv('5.urldata.csv', usecols=["Domain"],low_memory=False)
+from URLFeatureExtraction import featureExtraction
+
+# Load legitimate domains for fuzzy matching
+df = pd.read_csv('5.urldata.csv', usecols=["Domain"], low_memory=False)
 df["Domain"] = df["Domain"].str.lower()
-
-
-def find_best_match(phishing_domain, legit_domains):
-    # Vectorized fuzzy matching to get the best match
-    best_match = process.extractOne(phishing_domain, legit_domains, scorer=fuzz.ratio)
-    return best_match  # Returns (best_match_domain, score)
-
-# Convert column to a NumPy array for faster access
 legit_domains = df["Domain"].values
 
+# Load trained phishing detection model
+with open("XGBoostClassifier.pickle.dat", "rb") as f:
+    model = pickle.load(f)
 
-
+# Initialize FastAPI app
 app = FastAPI()
 
-# Allow frontend to communicate with backend
+# Allow frontend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change "*" to ["http://localhost:5174"] for better security
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,9 +35,23 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
-    return {"message": "FastAPI is running!"}
+    return {"message": "Phishing detection API is running!"}
+
+# Request model for /predict endpoint
+class URLRequest(BaseModel):
+    url: str
+
+@app.post("/predict")
+def predict_phishing(request: URLRequest):
+    """Predict if a website is phishing or legitimate."""
+    features = featureExtraction(request.url)
+    print(f"Extracted Features: {features}")  # Debugging
+    prediction = model.predict(np.array([features]))[0]
+    result = "Phishing" if prediction == 1 else "Legitimate"
+    return {"url": request.url, "prediction": result}
 
 @app.get("/recommend")
-def recommend(phishing_domain: str):
-    best_match = find_best_match(phishing_domain, legit_domains)
-    return {"input": phishing_domain, "recommended": best_match[0]}
+def recommend_legit_website(phishing_domain: str):
+    """Find the closest legitimate website for a phishing domain."""
+    best_match = process.extractOne(phishing_domain, legit_domains, scorer=fuzz.ratio)
+    return {"phishing_domain": phishing_domain, "recommended_legit": best_match[0] if best_match else None}
