@@ -4,7 +4,6 @@
 from urllib.parse import urlparse,urlencode
 import ipaddress
 import re
-import socket
 
 import whois
 
@@ -28,20 +27,12 @@ If the domain part of URL has IP address, the value assigned to this feature is 
 
 # 2.Checks for IP address in URL (Have_IP)
 def havingIP(url):
-    try:
-        # Extract domain from the URL
+  try:
         domain = urlparse(url).netloc
-        if not domain:  # Handle cases where the URL is just a domain
-            domain = url
-
-        # Resolve domain to IP
-        ip = socket.gethostbyname(domain)
-
-        # Check if the resolved IP is valid
-        ipaddress.ip_address(ip)
-        return 1  # Has a valid IP address
-    except:
-        return 0  # No valid IP address
+        ipaddress.ip_address(domain)
+        return 1  # Phishing
+  except ValueError:
+        return 0  # Legitimate
 
 """#### **3.1.3. "@" Symbol in URL**
 
@@ -67,7 +58,7 @@ If the length of URL >= 54 , the value assigned to this feature is 1 (phishing) 
 
 # 4.Finding the length of URL and categorizing (URL_Length)
 def getLength(url):
-  if len(url) < 54:
+  if len(url) < 0:
     length = 0            
   else:
     length = 1            
@@ -82,11 +73,7 @@ The value of feature is a numerical based on the URL.
 
 # 5.Gives number of '/' in URL (URL_Depth)
 def getDepth(url):
-  s = urlparse(url).path.split('/')
-  depth = 0
-  for j in range(len(s)):
-    if len(s[j]) != 0:
-      depth = depth+1
+  depth = url.count('/')
   return depth
 
 """#### **3.1.6. Redirection "//" in URL**
@@ -116,10 +103,11 @@ If the URL has "http/https" in the domain part, the value assigned to this featu
 
 # 7.Existence of “HTTPS” Token in the Domain Part of the URL (https_Domain)
 def httpDomain(url):
-  if 'https' in url:
-    return 0
-  else:
+  domain = urlparse(url).netloc
+  if 'https' in domain:
     return 1
+  else:
+    return 0
 
 """#### **3.1.8. Using URL Shortening Services “TinyURL”**
 
@@ -128,23 +116,12 @@ URL shortening is a method on the “World Wide Web” in which a URL may be mad
 If the URL is using Shortening Services, the value assigned to this feature is 1 (phishing) or else 0 (legitimate).
 """
 
-#listing shortening services
-shortening_services = r"bit\.ly|goo\.gl|shorte\.st|go2l\.ink|x\.co|ow\.ly|t\.co|tinyurl|tr\.im|is\.gd|cli\.gs|" \
-                      r"yfrog\.com|migre\.me|ff\.im|tiny\.cc|url4\.eu|twit\.ac|su\.pr|twurl\.nl|snipurl\.com|" \
-                      r"short\.to|BudURL\.com|ping\.fm|post\.ly|Just\.as|bkite\.com|snipr\.com|fic\.kr|loopt\.us|" \
-                      r"doiop\.com|short\.ie|kl\.am|wp\.me|rubyurl\.com|om\.ly|to\.ly|bit\.do|t\.co|lnkd\.in|db\.tt|" \
-                      r"qr\.ae|adf\.ly|goo\.gl|bitly\.com|cur\.lv|tinyurl\.com|ow\.ly|bit\.ly|ity\.im|q\.gs|is\.gd|" \
-                      r"po\.st|bc\.vc|twitthis\.com|u\.to|j\.mp|buzurl\.com|cutt\.us|u\.bb|yourls\.org|x\.co|" \
-                      r"prettylinkpro\.com|scrnch\.me|filoops\.info|vzturl\.com|qr\.net|1url\.com|tweez\.me|v\.gd|" \
-                      r"tr\.im|link\.zip\.net"
-
 # 8. Checking for Shortening Services in URL (Tiny_URL)
 def tinyURL(url):
-    match=re.search(shortening_services,url)
-    if match:
-        return 1
-    else:
-        return 0
+    """Check if the URL uses a known URL shortening service."""
+    shortening_services = r"bit\.ly|goo\.gl|shorte\.st|tinyurl\.com|tr\.im|is\.gd|cli\.gs|yfrog\.com|migre\.me|ff\.im|tiny\.cc|url4\.eu|twit\.ac|su\.pr|twurl\.nl|snipurl\.com|short\.to|BudURL\.com|ping\.fm|post\.ly|Just\.as|bkite\.com|snipr\.com|fic\.kr|loopt\.us|doiop\.com|short\.ie|kl\.am|wp\.me|rubyurl\.com|om\.ly|to\.ly|bit\.do|t\.co|lnkd\.in|db\.tt|qr\.ae|adf\.ly|goo\.su|bc\.vc|x\.co|ow\.ly|prettylinkpro\.com|scrnch\.me|filoops\.info|vzturl\.com|qr\.net|1url\.com|tweez\.me|v\.gd|tr\.im|link\.zip\.net"
+    domain = urlparse(url).netloc
+    return 1 if re.search(shortening_services, domain) else 0
 
 """#### **3.1.9. Prefix or Suffix "-" in Domain**
 
@@ -155,7 +132,7 @@ If the URL has '-' symbol in the domain part of the URL, the value assigned to t
 
 # 9.Checking for Prefix or Suffix Separated by (-) in the Domain (Prefix/Suffix)
 def prefixSuffix(url):
-    if '-' in url:
+    if '-' in urlparse(url).netloc:
         return 1            # phishing
     else:
         return 0            # legitimate
@@ -199,20 +176,20 @@ If the rank of the domain < 100000, the vlaue of this feature is 1 (phishing) el
 """
 
 # 12.Web traffic (Web_Traffic)
-import requests
-
 def web_traffic(url):
-    """Check website rank using Tranco List."""
-    try:
-        response = requests.get(f"https://tranco-list.eu/api/ranks/domain/{urlparse(url).netloc}")
-        data = response.json()
-        print(data)
-        rank = data.get("rank", 999999)  # Default to a high rank if not found
-        return 0 if rank < 50000 else 1
-    except:
-        return 50  # Assume high risk if request fails
-
-
+  """Check website traffic using SimilarWeb API (Alexa is deprecated)."""
+  try:
+        domain = urlparse(url).netloc
+        response = requests.get(f"https://www.similarweb.com/website/{domain}")
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            rank = soup.find("span", class_="ranking-item-value")
+            if rank:
+                rank_value = int(rank.text.replace(',', ''))
+                return 1 if rank_value > 100000 else 0
+  except:
+        pass
+  return 1  # Assume phishing if traffic data is unavailable
 
 """#### **3.2.3. Age of Domain**
 
@@ -223,25 +200,23 @@ If age of domain > 12 months, the vlaue of this feature is 1 (phishing) else 0 (
 
 # 13.Survival time of domain: The difference between termination time and creation time (Domain_Age)  
 def domainAge(domain_name):
-  creation_date = domain_name.creation_date
-  expiration_date = domain_name.expiration_date
-  if (isinstance(creation_date,str) or isinstance(expiration_date,str)):
     try:
-      creation_date = datetime.strptime(creation_date,'%Y-%m-%d')
-      expiration_date = datetime.strptime(expiration_date,"%Y-%m-%d")
+        creation_date = domain_name.creation_date
+        expiration_date = domain_name.expiration_date
+
+        if isinstance(creation_date, list):
+            creation_date = creation_date[0]
+        if isinstance(expiration_date, list):
+            expiration_date = expiration_date[0]
+
+        if not creation_date or not expiration_date:
+            return 1  # Phishing
+
+        age_of_domain = (expiration_date - creation_date).days
+        return 0 if age_of_domain / 30 >= 6 else 1
     except:
-      return 1
-  if ((expiration_date is None) or (creation_date is None)):
-      return 1
-  elif ((type(expiration_date) is list) or (type(creation_date) is list)):
-      return 1
-  else:
-    ageofdomain = abs((expiration_date - creation_date).days)
-    if ((ageofdomain/30) < 6):
-      age = 1
-    else:
-      age = 0
-  return age
+        return 1  # Phishing (in case of any error fetching details)
+
 
 """#### **3.2.4. End Period of Domain**
 
@@ -252,24 +227,21 @@ If end period of domain > 6 months, the vlaue of this feature is 1 (phishing) el
 
 # 14.End time of domain: The difference between termination time and current time (Domain_End) 
 def domainEnd(domain_name):
-  expiration_date = domain_name.expiration_date
-  if isinstance(expiration_date,str):
-    try:
-      expiration_date = datetime.strptime(expiration_date,"%Y-%m-%d")
-    except:
-      return 1
-  if (expiration_date is None):
-      return 1
-  elif (type(expiration_date) is list):
-      return 1
-  else:
-    today = datetime.now()
-    end = abs((expiration_date - today).days)
-    if ((end/30) < 6):
-      end = 0
-    else:
-      end = 1
-  return end
+  """Check if the domain expires in less than 6 months."""
+  try:
+        expiration_date = domain_name.expiration_date
+        if isinstance(expiration_date, list):
+            expiration_date = expiration_date[0]
+
+        if not expiration_date:
+            return 0  # Phishing
+
+        today = datetime.now()
+        remaining_days = (expiration_date - today).days
+        return 0 if remaining_days / 30 < 6 else 1
+  except:
+        return 0  # Phishing (if expiration date is unavailable)
+
 
 """## **3.3. HTML and JavaScript based Features**
 
@@ -295,13 +267,9 @@ If the iframe is empty or repsonse is not found then, the value assigned to this
 
 # 15. IFrame Redirection (iFrame)
 def iframe(response):
-  if response == "":
-      return 1
-  else:
-      if re.findall(r"[<iframe>|<frameBorder>]", response.text):
-          return 0
-      else:
-          return 1
+  if response is None or not hasattr(response, "text"):
+        return 0  # Phishing
+  return 1 if re.search(r"<iframe>|<frameBorder>", response.text) else 0
 
 """### **3.3.2. Status Bar Customization**
 
@@ -400,4 +368,3 @@ def featureExtraction(url):
 feature_names = ['Domain', 'Have_IP', 'Have_At', 'URL_Length', 'URL_Depth','Redirection', 
                       'https_Domain', 'TinyURL', 'Prefix/Suffix', 'DNS_Record', 'Web_Traffic', 
                       'Domain_Age', 'Domain_End', 'iFrame', 'Mouse_Over','Right_Click', 'Web_Forwards', 'Label']
-

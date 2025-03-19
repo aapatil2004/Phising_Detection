@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 import requests
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import pandas as pd
 import numpy as np
@@ -37,18 +37,34 @@ app.add_middleware(
 def read_root():
     return {"message": "Phishing detection API is running!"}
 
+
 # Request model for /predict endpoint
 class URLRequest(BaseModel):
     url: str
 
 @app.post("/predict")
 def predict_phishing(request: URLRequest):
-    """Predict if a website is phishing or legitimate."""
     features = featureExtraction(request.url)
     print(f"Extracted Features: {features}")  # Debugging
     prediction = model.predict(np.array([features]))[0]
     result = "Phishing" if prediction == 1 else "Legitimate"
     return {"url": request.url, "prediction": result}
+    # """Predict if a website is phishing or legitimate using features from CSV."""
+    
+    # # Extract features for the given domain
+    # domain_data = df[df["Domain"] == request.url]
+    
+
+    # # Drop non-feature columns (assuming first is Domain, last is Label)
+    # features = domain_data.iloc[:, 1:-1].values  # Keep only feature columns
+
+    # # Make prediction
+    # prediction = model.predict(features)[0]
+    # result = "Phishing" if prediction == 1 else "Legitimate"
+
+    # return {"url": request.url, "prediction": result}
+    
+    
 
 @app.get("/recommend")
 def recommend_legit_website(phishing_domain: str):
